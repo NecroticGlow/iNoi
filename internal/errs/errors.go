@@ -8,21 +8,24 @@ import (
 )
 
 var (
-	NotImplement = errors.New("not implement")
-	NotSupport   = errors.New("not support")
-	RelativePath = errors.New("using relative path is not allowed")
+	NotImplement = errors.New("功能未实现")
+	NotSupport   = errors.New("不支持此操作")
+	RelativePath = errors.New("不允许使用相对路径")
 
-	MoveBetweenTwoStorages = errors.New("can't move files between two storages, try to copy")
-	UploadNotSupported     = errors.New("upload not supported")
+	UploadNotSupported = errors.New("不支持上传功能")
+	MetaNotFound       = errors.New("元数据不存在")
+	StorageNotFound    = errors.New("存储不存在")
+	StorageNotInit     = errors.New("存储未初始化")
+	StreamIncomplete   = errors.New("上传/下载流不完整，可能是网络问题")
+	StreamPeekFail     = errors.New("流预览失败")
 
-	MetaNotFound     = errors.New("meta not found")
-	StorageNotFound  = errors.New("storage not found")
-	StreamIncomplete = errors.New("upload/download stream incomplete, possible network issue")
-	StreamPeekFail   = errors.New("StreamPeekFail")
+	UnknownArchiveFormat      = errors.New("未知的压缩文件格式")
+	WrongArchivePassword      = errors.New("压缩包密码错误")
+	DriverExtractNotSupported = errors.New("驱动不支持解压操作")
 
-	UnknownArchiveFormat      = errors.New("unknown archive format")
-	WrongArchivePassword      = errors.New("wrong archive password")
-	DriverExtractNotSupported = errors.New("driver extraction not supported")
+	WrongShareCode  = errors.New("分享码错误")
+	InvalidSharing  = errors.New("分享无效")
+	SharingNotFound = errors.New("分享不存在")
 )
 
 // NewErr wrap constant error with an extra message
@@ -38,6 +41,6 @@ func IsNotFoundError(err error) bool {
 func IsNotSupportError(err error) bool {
 	return errors.Is(pkgerr.Cause(err), NotSupport)
 }
-func IsNotImplement(err error) bool {
+func IsNotImplementError(err error) bool {
 	return errors.Is(pkgerr.Cause(err), NotImplement)
 }

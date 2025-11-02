@@ -16,12 +16,14 @@ import (
 
 func initUser() {
 	admin, err := op.GetAdmin()
-	adminPassword := "iNoi-PSWD"
-	envpass := os.Getenv("OPENLIST_ADMIN_PASSWORD")
+	// 先确定密码来源
+	var adminPassword string
 	if flags.Dev {
-		adminPassword = "admin"
-	} else if len(envpass) > 0 {
-		adminPassword = envpass
+		adminPassword = "admin" // 开发环境
+	} else if envpass := os.Getenv("INOI_ADMIN_PASSWORD"); envpass != "" {
+		adminPassword = envpass // 生产环境优先用环境变量
+	} else {
+		adminPassword = "iNoi-PSWD" // 默认值
 	}
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -33,18 +35,18 @@ func initUser() {
 				Role:     model.ADMIN,
 				BasePath: "/",
 				Authn:    "[]",
-				// 0(can see hidden) - 7(can remove) & 12(can read archives) - 13(can decompress archives)
-				Permission: 0x31FF,
+				// 0(can see hidden) - 8(webdav read) & 12(can read archives) - 14(can share)
+				Permission: 0x71FF,
 			}
 			if err := op.CreateUser(admin); err != nil {
 				panic(err)
 			} else {
 				// DO NOT output the password to log file. Only output to console.
 				// utils.Log.Infof("Successfully created the admin user and the initial password is: %s", adminPassword)
-				fmt.Printf("Successfully created the admin user and the initial password is: %s\n", adminPassword)
+				fmt.Printf("管理员用户创建成功，初始密码为: %s\n", adminPassword)
 			}
 		} else {
-			utils.Log.Fatalf("[init user] Failed to get admin user: %v", err)
+			utils.Log.Fatalf("[初始化用户] 获取管理员用户失败: %v", err)
 		}
 	}
 	_, err = op.GetGuest()
@@ -62,10 +64,10 @@ func initUser() {
 				Authn:      "[]",
 			}
 			if err := db.CreateUser(guest); err != nil {
-				utils.Log.Fatalf("[init user] Failed to create guest user: %v", err)
+				utils.Log.Fatalf("[初始化用户] 创建访客用户失败: %v", err)
 			}
 		} else {
-			utils.Log.Fatalf("[init user] Failed to get guest user: %v", err)
+			utils.Log.Fatalf("[初始化用户] 获取访客用户失败: %v", err)
 		}
 	}
 }
