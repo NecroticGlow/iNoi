@@ -82,7 +82,6 @@ jobs:
         with:
           images: |
             necroticglow/inoi
-            ghcr.io/${{ github.repository }}
           flavor: |
             latest=auto
             ${{ matrix.tag_favor }}
