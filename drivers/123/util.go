@@ -18,6 +18,7 @@ import (
 	"github.com/go-resty/resty/v2"
 	jsoniter "github.com/json-iterator/go"
 	log "github.com/sirupsen/logrus"
+	"github.com/google/uuid"
 )
 
 // do others that not defined in Driver interface
@@ -64,7 +65,7 @@ func signPath(path string, os string, version string) (k string, v string) {
 func GetApi(rawUrl string) string {
 	u, _ := url.Parse(rawUrl)
 	query := u.Query()
-	query.Add(signPath(u.Path, "web", "3"))
+	query.Add(signPath(u.Path, "android", "2.5.4"))
 	u.RawQuery = query.Encode()
 	return u.String()
 }
@@ -160,15 +161,20 @@ func (d *Pan123) login() error {
 		}
 	}
 	res, err := base.RestyClient.R().
-		SetHeaders(map[string]string{
-			"origin":      "https://www.123pan.com",
-			"referer":     "https://www.123pan.com/",
-			"user-agent":  "Dart/2.19(dart:io)-openlist",
-			"platform":    "web",
-			"app-version": "3",
-			//"user-agent":  base.UserAgent,
-		}).
-		SetBody(body).Post(SignIn)
+	SetHeaders(map[string]string{
+		"User-Agent":     "123pan/v2.5.4(Android_14.0.0;Xiaomi)",
+		"Authorization":  "", // 登录请求不用 token
+		"Origin":         "https://www.123pan.com",
+		"Referer":        "https://www.123pan.com/",
+		"platform":       "android",
+		"app-version":    "77",
+		"X-App-Version":  "2.5.4",
+		"osversion":      "Android_14.0.0",
+		"devicetype":     "M2104K10I",
+		"devicename":     "Xiaomi",
+		"Accept-Encoding": "gzip",
+	}).
+	SetBody(body).Post(SignIn)
 	if err != nil {
 		return err
 	}
@@ -197,17 +203,24 @@ func (d *Pan123) login() error {
 func (d *Pan123) Request(url string, method string, callback base.ReqCallback, resp interface{}) ([]byte, error) {
 	isRetry := false
 do:
-	req := base.RestyClient.R()
-	req.SetHeaders(map[string]string{
-		"origin":        "https://www.123pan.com",
-		"referer":       "https://www.123pan.com/",
-		"authorization": "Bearer " + d.AccessToken,
-		"user-agent":    "123pan/v2.5.4(Android_14.0.0;Xiaomi)",
-		"app-version": "77",
-		"platform": "android",
-		"x-app-version": "2.5.4",
-		//"user-agent":    base.UserAgent,
-	})
+   req := base.RestyClient.R()
+   req.SetHeaders(map[string]string{
+	"User-Agent":     "123pan/v2.5.4(Android_14.0.0;Xiaomi)",
+	"Authorization":  "Bearer " + d.AccessToken,
+	"Accept-Encoding": "gzip",
+	"Content-Type":   "application/json",
+	"osversion":      "Android_14.0.0",
+	"loginuuid":      uuid.New().String(),
+	"platform":       "android",
+	"devicetype":     "M2104K10I",
+	"devicename":     "Xiaomi",
+	"Host":           "www.123pan.com",
+	"App-Version":    "77",
+	"X-App-Version":  "2.5.4",
+	"Origin":         "https://www.123pan.com",
+	"Referer":        "https://www.123pan.com/",
+})
+
 	if callback != nil {
 		callback(req)
 	}
