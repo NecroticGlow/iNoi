@@ -37,7 +37,7 @@ jobs:
 
       # 构建 Go 二进制文件
       - name: Build go binary
-        run: bash build.sh release docker-multiplatform
+        run: bash build2.sh release docker-multiplatform
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
