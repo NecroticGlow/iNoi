@@ -164,7 +164,7 @@ func (d *Pan123) login() error {
 			"origin":      "https://www.123pan.com",
 			"referer":     "https://www.123pan.com/",
 			"user-agent":  "Dart/2.19(dart:io)-openlist",
-			"platform":    "android",
+			"platform":    "web",
 			"app-version": "3",
 			//"user-agent":  base.UserAgent,
 		}).
@@ -202,9 +202,10 @@ do:
 		"origin":        "https://www.123pan.com",
 		"referer":       "https://www.123pan.com/",
 		"authorization": "Bearer " + d.AccessToken,
-		"user-agent":    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) openlist-client",
-		"platform":      "android",
-		"app-version":   "3",
+		"user-agent":    "123pan/v2.5.4(Android_14.0.0;Xiaomi)",
+		"app-version": "77",
+		"platform": "android",
+		"x-app-version": "2.5.4",
 		//"user-agent":    base.UserAgent,
 	})
 	if callback != nil {
