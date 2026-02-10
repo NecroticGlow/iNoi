@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -18,224 +19,366 @@ import (
 	"github.com/go-resty/resty/v2"
 	jsoniter "github.com/json-iterator/go"
 	log "github.com/sirupsen/logrus"
-	"github.com/google/uuid"
 )
 
-/*
-	======== 常量 =========
-*/
+// do others that not defined in Driver interface
 
 const (
-	Api      = "https://www.123pan.com/api"
-	AApi     = "https://www.123pan.com/a/api"
-	BApi     = "https://www.123pan.com/b/api"
-
-	LoginApi = "https://login.123pan.com/api"
-	MainApi  = BApi
-
-	SignIn   = LoginApi + "/user/sign_in"
-	Logout   = MainApi + "/user/logout"
-
-	UserInfo = MainApi + "/user/info"
-	FileList = MainApi + "/file/list/new"
-
-	DownloadInfo = MainApi + "/file/download_info"
-
-	Mkdir  = MainApi + "/file/upload_request"
-	Move   = MainApi + "/file/mod_pid"
-	Rename = MainApi + "/file/rename"
-	Trash  = MainApi + "/file/trash"
-
-	UploadRequest    = MainApi + "/file/upload_request"
-	UploadComplete   = MainApi + "/file/upload_complete"
-	UploadCompleteV2 = MainApi + "/file/upload_complete/v2"
-
-	S3PreSignedUrls = MainApi + "/file/s3_repare_upload_parts_batch"
-	S3Auth          = MainApi + "/file/s3_upload_object/auth"
-	S3Complete      = MainApi + "/file/s3_complete_multipart_upload"
+	ApiBase          = "https://www.123pan.com"
+	Api              = ApiBase + "/api"
+	AApi             = ApiBase + "/a/api"
+	BApi             = ApiBase + "/b/api"
+	LoginApi         = "https://login.123pan.com/api"
+	MainApi          = BApi
+	SignInAndroid    = BApi + "/user/sign_in"
+	SignInWeb        = LoginApi + "/user/sign_in"
+	Logout           = MainApi + "/user/logout"
+	UserInfo         = BApi + "/user/info"
+	FileList         = Api + "/file/list/new"
+	DownloadInfo     = AApi + "/file/download_info"
+	Mkdir            = AApi + "/file/upload_request"
+	Move             = MainApi + "/file/mod_pid"
+	Rename           = MainApi + "/file/rename"
+	Trash            = AApi + "/file/trash"
+	UploadRequest    = BApi + "/file/upload_request"
+	UploadComplete   = BApi + "/file/upload_complete"
+	S3PreSignedUrls  = BApi + "/file/s3_repare_upload_parts_batch"
+	S3Auth           = BApi + "/file/s3_upload_object/auth"
+	UploadCompleteV2 = BApi + "/file/upload_complete/v2"
+	S3Complete       = BApi + "/file/s3_complete_multipart_upload"
+	// AuthKeySalt      = "8-8D$sL8gPjom7bk#cY"
 )
 
-/*
-	======== Android 签名 =========
-*/
+const (
+	androidAppVersion   = "61"
+	androidXAppVersion  = "2.4.0"
+	androidDeviceBrand  = "Xiaomi"
+	androidPlatformName = "android"
+)
 
-func signPath(path, os, version string) (string, string) {
-	table := []byte{'a','d','e','f','g','h','l','m','y','i','j','n','o','p','k','q','r','s','t','u','b','c','v','w','s','z'}
-	random := fmt.Sprintf("%.f", math.Round(1e7*rand.Float64()))
-	now := time.Now().In(time.FixedZone("CST", 8*3600))
-
-	timestamp := fmt.Sprint(now.Unix())
-	nowStr := []byte(now.Format("200601021504"))
-	for i := range nowStr {
-		nowStr[i] = table[nowStr[i]-48]
+var (
+	androidDeviceTypes = []string{
+		"24075RP89G", "24076RP19G", "24076RP19I", "M1805E10A", "M2004J11G",
+		"M2012K11AG", "M2104K10I", "22021211RG", "22021211RI", "21121210G",
+		"23049PCD8G", "23049PCD8I", "23013PC75G", "24069PC21G", "24069PC21I",
+		"23113RKC6G", "M1912G7BI", "M2007J20CI", "M2007J20CG", "M2007J20CT",
+		"M2102J20SG", "M2102J20SI", "21061110AG", "2201116PG", "2201116PI",
+		"22041216G", "22041216UG", "22111317PG", "22111317PI", "22101320G",
+		"22101320I", "23122PCD1G", "23122PCD1I", "2311DRK48G", "2311DRK48I",
+		"2312FRAFDI", "M2004J19PI",
 	}
+	androidOSVersions = []string{
+		"Android_7.1.2", "Android_8.0.0", "Android_8.1.0", "Android_9.0",
+		"Android_10", "Android_11", "Android_12", "Android_13",
+		"Android_6.0.1", "Android_5.1.1", "Android_4.4.4", "Android_4.3",
+		"Android_4.2.2", "Android_4.1.2",
+	}
+	androidRand       = rand.New(rand.NewSource(time.Now().UnixNano()))
+	androidDeviceType = pickAndroid(androidDeviceTypes)
+	androidOSVersion  = pickAndroid(androidOSVersions)
+	androidLoginUUID  = randHex(32)
+)
 
-	timeSign := fmt.Sprint(crc32.ChecksumIEEE(nowStr))
-	data := strings.Join([]string{
-		timestamp,
-		random,
-		path,
-		os,
-		version,
-		timeSign,
-	}, "|")
-
-	dataSign := fmt.Sprint(crc32.ChecksumIEEE([]byte(data)))
-	return timeSign, timestamp + "-" + random + "-" + dataSign
+func pickAndroid(options []string) string {
+	if len(options) == 0 {
+		return ""
+	}
+	return options[androidRand.Intn(len(options))]
 }
 
-func GetApi(raw string) string {
-	u, _ := url.Parse(raw)
-	q := u.Query()
-	q.Add(signPath(u.Path, "android", "2.5.4"))
-	u.RawQuery = q.Encode()
+func randHex(n int) string {
+	const hex = "0123456789abcdef"
+	if n <= 0 {
+		return ""
+	}
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = hex[androidRand.Intn(len(hex))]
+	}
+	return string(b)
+}
+
+func useAndroidProtocol() bool {
+	return strings.ToLower(strings.TrimSpace(os.Getenv("PAN123_PROTOCOL"))) != "web"
+}
+
+func androidHeaders(authorization string) map[string]string {
+	return map[string]string{
+		"content-type":   "application/json",
+		"authorization":  authorization,
+		"LoginUuid":      androidLoginUUID,
+		"user-agent":     fmt.Sprintf("123pan/v%s(%s;%s)", androidXAppVersion, androidOSVersion, androidDeviceBrand),
+		"accept-encoding": "gzip",
+		"osversion":      androidOSVersion,
+		"platform":       androidPlatformName,
+		"devicetype":     androidDeviceType,
+		"devicename":     androidDeviceBrand,
+		"host":           "www.123pan.com",
+		"app-version":    androidAppVersion,
+		"x-app-version":  androidXAppVersion,
+	}
+}
+
+func webHeaders(authorization string) map[string]string {
+	return map[string]string{
+		"origin":        "https://www.123pan.com",
+		"referer":       "https://www.123pan.com/",
+		"authorization": authorization,
+		"user-agent":    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) openlist-client",
+		"platform":      "web",
+		"app-version":   "3",
+	}
+}
+
+func signPath(path string, os string, version string) (k string, v string) {
+	table := []byte{'a', 'd', 'e', 'f', 'g', 'h', 'l', 'm', 'y', 'i', 'j', 'n', 'o', 'p', 'k', 'q', 'r', 's', 't', 'u', 'b', 'c', 'v', 'w', 's', 'z'}
+	random := fmt.Sprintf("%.f", math.Round(1e7*rand.Float64()))
+	now := time.Now().In(time.FixedZone("CST", 8*3600))
+	timestamp := fmt.Sprint(now.Unix())
+	nowStr := []byte(now.Format("200601021504"))
+	for i := 0; i < len(nowStr); i++ {
+		nowStr[i] = table[nowStr[i]-48]
+	}
+	timeSign := fmt.Sprint(crc32.ChecksumIEEE(nowStr))
+	data := strings.Join([]string{timestamp, random, path, os, version, timeSign}, "|")
+	dataSign := fmt.Sprint(crc32.ChecksumIEEE([]byte(data)))
+	return timeSign, strings.Join([]string{timestamp, random, dataSign}, "-")
+}
+
+func GetApi(rawUrl string) string {
+	u, _ := url.Parse(rawUrl)
+	query := u.Query()
+	query.Add(signPath(u.Path, "web", "3"))
+	u.RawQuery = query.Encode()
 	return u.String()
 }
 
-/*
-	======== 登录 =========
-*/
+//func GetApi(url string) string {
+//	vm := js.New()
+//	vm.Set("url", url[22:])
+//	r, err := vm.RunString(`
+//	(function(e){
+//        function A(t, e) {
+//            e = 1 < arguments.length && void 0 !== e ? e : 10;
+//            for (var n = function() {
+//                for (var t = [], e = 0; e < 256; e++) {
+//                    for (var n = e, r = 0; r < 8; r++)
+//                        n = 1 & n ? 3988292384 ^ n >>> 1 : n >>> 1;
+//                    t[e] = n
+//                }
+//                return t
+//            }(), r = function(t) {
+//                t = t.replace(/\\r\\n/g, "\\n");
+//                for (var e = "", n = 0; n < t.length; n++) {
+//                    var r = t.charCodeAt(n);
+//                    r < 128 ? e += String.fromCharCode(r) : e = 127 < r && r < 2048 ? (e += String.fromCharCode(r >> 6 | 192)) + String.fromCharCode(63 & r | 128) : (e = (e += String.fromCharCode(r >> 12 | 224)) + String.fromCharCode(r >> 6 & 63 | 128)) + String.fromCharCode(63 & r | 128)
+//                }
+//                return e
+//            }(t), a = -1, i = 0; i < r.length; i++)
+//                a = a >>> 8 ^ n[255 & (a ^ r.charCodeAt(i))];
+//            return (a = (-1 ^ a) >>> 0).toString(e)
+//        }
+//
+//	   function v(t) {
+//	       return (v = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function(t) {
+//	                   return typeof t
+//	               }
+//	               : function(t) {
+//	                   return t && "function" == typeof Symbol && t.constructor === Symbol && t !== Symbol.prototype ? "symbol" : typeof t
+//	               }
+//	       )(t)
+//	   }
+//
+//		for (p in a = Math.round(1e7 * Math.random()),
+//		o = Math.round(((new Date).getTime() + 60 * (new Date).getTimezoneOffset() * 1e3 + 288e5) / 1e3).toString(),
+//		m = ["a", "d", "e", "f", "g", "h", "l", "m", "y", "i", "j", "n", "o", "p", "k", "q", "r", "s", "t", "u", "b", "c", "v", "w", "s", "z"],
+//		u = function(t, e, n) {
+//			var r;
+//			n = 2 < arguments.length && void 0 !== n ? n : 8;
+//			return 0 === arguments.length ? null : (r = "object" === v(t) ? t : (10 === "".concat(t).length && (t = 1e3 * Number.parseInt(t)),
+//			new Date(t)),
+//			t += 6e4 * new Date(t).getTimezoneOffset(),
+//			{
+//				y: (r = new Date(t + 36e5 * n)).getFullYear(),
+//				m: r.getMonth() + 1 < 10 ? "0".concat(r.getMonth() + 1) : r.getMonth() + 1,
+//				d: r.getDate() < 10 ? "0".concat(r.getDate()) : r.getDate(),
+//				h: r.getHours() < 10 ? "0".concat(r.getHours()) : r.getHours(),
+//				f: r.getMinutes() < 10 ? "0".concat(r.getMinutes()) : r.getMinutes()
+//			})
+//		}(o),
+//		h = u.y,
+//		g = u.m,
+//		l = u.d,
+//		c = u.h,
+//		u = u.f,
+//		d = [h, g, l, c, u].join(""),
+//		f = [],
+//		d)
+//			f.push(m[Number(d[p])]);
+//		return h = A(f.join("")),
+//		g = A("".concat(o, "|").concat(a, "|").concat(e, "|").concat("web", "|").concat("3", "|").concat(h)),
+//		"".concat(h, "=").concat(o, "-").concat(a, "-").concat(g);
+//	})(url)
+//	   `)
+//	if err != nil {
+//		fmt.Println(err)
+//		return url
+//	}
+//	v, _ := r.Export().(string)
+//	return url + "?" + v
+//}
 
 func (d *Pan123) login() error {
 	var body base.Json
 	if utils.IsEmailFormat(d.Username) {
 		body = base.Json{
-			"mail": d.Username,
+			"mail":     d.Username,
 			"password": d.Password,
-			"type": 2,
+			"type":     2,
 		}
 	} else {
-		body = base.Json{
-			"passport": d.Username,
-			"password": d.Password,
-			"remember": true,
+		if useAndroidProtocol() {
+			body = base.Json{
+				"passport": d.Username,
+				"password": d.Password,
+				"type":     1,
+			}
+		} else {
+			body = base.Json{
+				"passport": d.Username,
+				"password": d.Password,
+				"remember": true,
+			}
 		}
 	}
-
+	loginUrl := SignInWeb
+	headers := webHeaders("")
+	if useAndroidProtocol() {
+		loginUrl = SignInAndroid
+		headers = androidHeaders("")
+	}
 	res, err := base.RestyClient.R().
-		SetHeaders(androidHeaders("")).
-		SetBody(body).
-		Post(SignIn)
+		SetHeaders(headers).
+		SetBody(body).Post(loginUrl)
 	if err != nil {
 		return err
 	}
-
 	if utils.Json.Get(res.Body(), "code").ToInt() != 200 {
-		return errors.New(utils.Json.Get(res.Body(), "message").ToString())
+		err = fmt.Errorf(utils.Json.Get(res.Body(), "message").ToString())
+	} else {
+		d.AccessToken = utils.Json.Get(res.Body(), "data", "token").ToString()
 	}
-
-	d.AccessToken = utils.Json.Get(res.Body(), "data", "token").ToString()
-	return nil
+	return err
 }
 
-/*
-	======== 请求核心 =========
-*/
+//func authKey(reqUrl string) (*string, error) {
+//	reqURL, err := url.Parse(reqUrl)
+//	if err != nil {
+//		return nil, err
+//	}
+//
+//	nowUnix := time.Now().Unix()
+//	random := rand.Intn(0x989680)
+//
+//	p4 := fmt.Sprintf("%d|%d|%s|%s|%s|%s", nowUnix, random, reqURL.Path, "web", "3", AuthKeySalt)
+//	authKey := fmt.Sprintf("%d-%d-%x", nowUnix, random, md5.Sum([]byte(p4)))
+//	return &authKey, nil
+//}
 
-func androidHeaders(token string) map[string]string {
-	h := map[string]string{
-		"User-Agent":      "123pan/v2.5.4(Android_14.0.0;Xiaomi)",
-		"Accept-Encoding":"gzip",
-		"Content-Type":   "application/json",
-		"osversion":      "Android_14.0.0",
-		"platform":       "android",
-		"devicetype":     "M2104K10I",
-		"devicename":     "Xiaomi",
-		"loginuuid":      uuid.New().String(),
-		"App-Version":    "77",
-		"X-App-Version":  "2.5.4",
-		"Origin":         "https://www.123pan.com",
-		"Referer":        "https://www.123pan.com/",
-	}
-	if token != "" {
-		h["Authorization"] = "Bearer " + token
-	}
-	return h
-}
-
-func (d *Pan123) Request(
-	url string,
-	method string,
-	cb base.ReqCallback,
-	resp interface{},
-) ([]byte, error) {
-
+func (d *Pan123) Request(url string, method string, callback base.ReqCallback, resp interface{}) ([]byte, error) {
 	isRetry := false
-
-retry:
-	req := base.RestyClient.R().
-		SetHeaders(androidHeaders(d.AccessToken))
-
-	if cb != nil {
-		cb(req)
+do:
+	req := base.RestyClient.R()
+	authorization := "Bearer " + d.AccessToken
+	headers := webHeaders(authorization)
+	if useAndroidProtocol() {
+		headers = androidHeaders(authorization)
+	}
+	req.SetHeaders(headers)
+	if callback != nil {
+		callback(req)
 	}
 	if resp != nil {
 		req.SetResult(resp)
 	}
-
-	res, err := req.Execute(method, GetApi(url))
+	//authKey, err := authKey(url)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//req.SetQueryParam("auth-key", *authKey)
+	finalURL := url
+	if !useAndroidProtocol() {
+		finalURL = GetApi(url)
+	}
+	res, err := req.Execute(method, finalURL)
 	if err != nil {
 		return nil, err
 	}
-
 	body := res.Body()
 	code := utils.Json.Get(body, "code").ToInt()
-
 	if code != 0 {
-		if code == 401 && !isRetry {
-			if err := d.login(); err != nil {
+		if !isRetry && code == 401 {
+			err := d.login()
+			if err != nil {
 				return nil, err
 			}
 			isRetry = true
-			goto retry
+			goto do
 		}
-		return nil, errors.New(utils.Json.Get(body, "message").ToString())
+		return nil, errors.New(jsoniter.Get(body, "message").ToString())
 	}
-
 	return body, nil
 }
 
-/*
-	======== 文件列表 =========
-*/
-
-func (d *Pan123) getFiles(ctx context.Context, parentId, name string) ([]File, error) {
+func (d *Pan123) getFiles(ctx context.Context, parentId string, name string) ([]File, error) {
 	page := 1
-	var res []File
-
+	total := 0
+	res := make([]File, 0)
+	// 2024-02-06 fix concurrency by 123pan
 	for {
+		if err := d.APIRateLimit(ctx, FileList); err != nil {
+			return nil, err
+		}
 		var resp Files
-		_, err := d.Request(FileList, http.MethodGet, func(r *resty.Request) {
-			r.SetContext(ctx)
-			r.SetQueryParams(map[string]string{
-				"driveId": "0",
-				"limit": "100",
-				"Page": strconv.Itoa(page),
-				"parentFileId": parentId,
-			})
+		query := map[string]string{
+			"driveId":              "0",
+			"limit":                "100",
+			"next":                 "0",
+			"orderBy":              "file_id",
+			"orderDirection":       "desc",
+			"parentFileId":         parentId,
+			"trashed":              "false",
+			"SearchData":           "",
+			"Page":                 strconv.Itoa(page),
+			"OnlyLookAbnormalFile": "0",
+			"event":                "homeListFile",
+			"operateType":          "4",
+			"inDirectSpace":        "false",
+		}
+		_res, err := d.Request(FileList, http.MethodGet, func(req *resty.Request) {
+			req.SetQueryParams(query)
 		}, &resp)
-
 		if err != nil {
 			return nil, err
 		}
-
+		log.Debug(string(_res))
+		page++
 		res = append(res, resp.Data.InfoList...)
-		if resp.Data.Next == "-1" || len(resp.Data.InfoList) == 0 {
+		total = resp.Data.Total
+		if len(resp.Data.InfoList) == 0 || resp.Data.Next == "-1" {
 			break
 		}
-		page++
+	}
+	if len(res) != total {
+		log.Warnf("incorrect file count from remote at %s: expected %d, got %d", name, total, len(res))
 	}
 	return res, nil
 }
 
-/*
-	======== 用户信息 =========
-*/
-
 func (d *Pan123) getUserInfo(ctx context.Context) (*UserInfoResp, error) {
 	var resp UserInfoResp
-	_, err := d.Request(UserInfo, http.MethodGet, func(r *resty.Request) {
-		r.SetContext(ctx)
+	_, err := d.Request(UserInfo, http.MethodGet, func(req *resty.Request) {
+		req.SetContext(ctx)
 	}, &resp)
 	if err != nil {
 		return nil, err
