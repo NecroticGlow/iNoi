@@ -13,7 +13,6 @@ version="windows-386"
 echo "== Build Windows 386 =="
 echo "commit: $gitCommit"
 
-# ldflags（不依赖 tag）
 ldflags="\
 -w -s \
 -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.BuiltAt=$builtAt' \
@@ -22,18 +21,17 @@ ldflags="\
 -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=$version' \
 "
 
-# 准备目录
 rm -rf "$outDir"
 mkdir -p "$outDir/tmp"
 
-# 构建 Windows 386
 export GOOS=windows
 export GOARCH=386
-export CGO_ENABLED=0
+export CGO_ENABLED=1
+export CC=i686-w64-mingw32-gcc
+export CXX=i686-w64-mingw32-g++
 
 go build -o "$outDir/tmp/$appName.exe" -ldflags="$ldflags" -tags=jsoniter .
 
-# 打包 zip
 cd "$outDir/tmp"
 zip "../$zipName" "$appName.exe"
 cd ../..
