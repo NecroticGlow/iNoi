@@ -29,7 +29,9 @@ import (
 type Pan123 struct {
 	model.Storage
 	Addition
-	apiRateLimit sync.Map
+	apiRateLimit       sync.Map
+	androidProfileOnce sync.Once
+	androidProfile     androidProfile
 }
 
 func (d *Pan123) Config() driver.Config {
@@ -41,14 +43,16 @@ func (d *Pan123) GetAddition() driver.Additional {
 }
 
 func (d *Pan123) Init(ctx context.Context) error {
-	_, err := d.Request(UserInfo, http.MethodGet, func(req *resty.Request) {
-		req.SetHeader("platform", "web")
+	_, err := d.Request(d.endpoints().UserInfo, http.MethodGet, func(req *resty.Request) {
+		if !d.isAndroid() {
+			req.SetHeader("platform", "web")
+		}
 	}, nil)
 	return err
 }
 
 func (d *Pan123) Drop(ctx context.Context) error {
-	_, _ = d.Request(Logout, http.MethodPost, func(req *resty.Request) {
+	_, _ = d.Request(d.endpoints().Logout, http.MethodPost, func(req *resty.Request) {
 		req.SetBody(base.Json{})
 	}, nil)
 	return nil
@@ -75,7 +79,7 @@ func (d *Pan123) Link(ctx context.Context, file model.Obj, args model.LinkArgs) 
 			"size":      f.Size,
 			"type":      f.Type,
 		}
-		resp, err := d.Request(DownloadInfo, http.MethodPost, func(req *resty.Request) {
+		resp, err := d.Request(d.endpoints().DownloadInfo, http.MethodPost, func(req *resty.Request) {
 			req.SetBody(data)
 		}, nil)
 		if err != nil {
@@ -98,7 +102,7 @@ func (d *Pan123) Link(ctx context.Context, file model.Obj, args model.LinkArgs) 
 		}
 
 		log.Debug("download url: ", u_)
-		res, err := base.NoRedirectClient.R().SetHeader("Referer", "https://yun.123pan.com/").Get(u_)
+		res, err := base.NoRedirectClient.R().SetHeader("Referer", d.endpoints().Referer).Get(u_)
 		if err != nil {
 			return nil, err
 		}
@@ -130,7 +134,7 @@ func (d *Pan123) MakeDir(ctx context.Context, parentDir model.Obj, dirName strin
 		"size":         0,
 		"type":         1,
 	}
-	_, err := d.Request(Mkdir, http.MethodPost, func(req *resty.Request) {
+	_, err := d.Request(d.endpoints().Mkdir, http.MethodPost, func(req *resty.Request) {
 		req.SetBody(data)
 	}, nil)
 	return err
@@ -141,7 +145,7 @@ func (d *Pan123) Move(ctx context.Context, srcObj, dstDir model.Obj) error {
 		"fileIdList":   []base.Json{{"FileId": srcObj.GetID()}},
 		"parentFileId": dstDir.GetID(),
 	}
-	_, err := d.Request(Move, http.MethodPost, func(req *resty.Request) {
+	_, err := d.Request(d.endpoints().Move, http.MethodPost, func(req *resty.Request) {
 		req.SetBody(data)
 	}, nil)
 	return err
@@ -153,7 +157,7 @@ func (d *Pan123) Rename(ctx context.Context, srcObj model.Obj, newName string) e
 		"fileId":   srcObj.GetID(),
 		"fileName": newName,
 	}
-	_, err := d.Request(Rename, http.MethodPost, func(req *resty.Request) {
+	_, err := d.Request(d.endpoints().Rename, http.MethodPost, func(req *resty.Request) {
 		req.SetBody(data)
 	}, nil)
 	return err
@@ -170,7 +174,7 @@ func (d *Pan123) Remove(ctx context.Context, obj model.Obj) error {
 			"operation":         true,
 			"fileTrashInfoList": []File{f},
 		}
-		_, err := d.Request(Trash, http.MethodPost, func(req *resty.Request) {
+		_, err := d.Request(d.endpoints().Trash, http.MethodPost, func(req *resty.Request) {
 			req.SetBody(data)
 		}, nil)
 		return err
@@ -198,7 +202,7 @@ func (d *Pan123) Put(ctx context.Context, dstDir model.Obj, file model.FileStrea
 		"type":         0,
 	}
 	var resp UploadResp
-	res, err := d.Request(UploadRequest, http.MethodPost, func(req *resty.Request) {
+	res, err := d.Request(d.endpoints().UploadRequest, http.MethodPost, func(req *resty.Request) {
 		req.SetBody(data).SetContext(ctx)
 	}, &resp)
 	if err != nil {
@@ -239,7 +243,7 @@ func (d *Pan123) Put(ctx context.Context, dstDir model.Obj, file model.FileStrea
 			return err
 		}
 	}
-	_, err = d.Request(UploadComplete, http.MethodPost, func(req *resty.Request) {
+	_, err = d.Request(d.endpoints().UploadComplete, http.MethodPost, func(req *resty.Request) {
 		req.SetBody(base.Json{
 			"fileId": resp.Data.FileId,
 		}).SetContext(ctx)

@@ -1,11 +1,14 @@
 set -e
-appName="openlist"
+appName="iNoi"
 builtAt="$(date +'%F %T %z')"
-gitAuthor="The OpenList Projects Contributors <noreply@openlist.team>"
+gitAuthor="The iNoi Projects Contributors <inoi@peifeng.li>"
 gitCommit=$(git log --pretty=format:"%h" -1)
 
-# Set frontend repository, default to OpenListTeam/OpenList-Frontend
-frontendRepo="${FRONTEND_REPO:-OpenListTeam/OpenList-Frontend}"
+# Keep the official OpenList build pipeline while sourcing iNoi's frontend.
+frontendRepo="${FRONTEND_REPO:-NecroticGlow/iNoi-Web}"
+localFrontendDir="${INOI_WEB_DIR:-../iNoi-Web}"
+webPackage="${INOI_WEB_DIST_TAR:-../iNoi-Web/compress/dist.tar.gz}"
+webPackageUrl="${INOI_WEB_DIST_URL:-https://github.com/user-attachments/files/28699218/dist.tar.gz}"
 
 githubAuthArgs=""
 if [ -n "$GITHUB_TOKEN" ]; then
@@ -18,17 +21,30 @@ if [[ "$*" == *"lite"* ]]; then
   useLite=true
 fi
 
+GetWebVersion() {
+  if [ -d "$localFrontendDir/.git" ]; then
+    git -C "$localFrontendDir" rev-parse --short HEAD 2>/dev/null && return
+  fi
+
+  web_tag=$(eval "curl -fsSL --max-time 2 $githubAuthArgs \"https://api.github.com/repos/$frontendRepo/releases/latest\"" 2>/dev/null | grep "tag_name" | head -n 1 | awk -F ":" '{print $2}' | sed 's/\"//g;s/,//g;s/ //g' || true)
+  if [ -n "$web_tag" ]; then
+    echo "$web_tag"
+  else
+    echo "custom"
+  fi
+}
+
 if [ "$1" = "dev" ]; then
   version="dev"
-  webVersion="rolling"
+  webVersion=$(GetWebVersion)
 elif [ "$1" = "beta" ]; then
   version="beta"
-  webVersion="rolling"
+  webVersion=$(GetWebVersion)
 else
   git tag -d beta || true
   # Always true if there's no tag
   version=$(git describe --abbrev=0 --tags 2>/dev/null || echo "v0.0.0")
-  webVersion=$(eval "curl -fsSL --max-time 2 $githubAuthArgs \"https://api.github.com/repos/$frontendRepo/releases/latest\"" | grep "tag_name" | head -n 1 | awk -F ":" '{print $2}' | sed 's/\"//g;s/,//g;s/ //g')
+  webVersion=$(GetWebVersion)
 fi
 
 echo "backend version: $version"
@@ -96,33 +112,33 @@ AssertStaticBinary() {
   return 0
 }
 
-FetchWebRolling() {
-  pre_release_json=$(eval "curl -fsSL --max-time 2 $githubAuthArgs -H \"Accept: application/vnd.github.v3+json\" \"https://api.github.com/repos/$frontendRepo/releases/tags/rolling\"")
-  pre_release_assets=$(echo "$pre_release_json" | jq -r '.assets[].browser_download_url')
-  
-  # There is no lite for rolling
-  pre_release_tar_url=$(echo "$pre_release_assets" | grep "openlist-frontend-dist" | grep -v "lite" | grep "\.tar\.gz$")
+FetchINoiWebPackage() {
+  if [ -f "$webPackage" ]; then
+    echo "using local frontend package: $webPackage"
+    cp "$webPackage" dist.tar.gz
+  else
+    echo "downloading iNoi frontend package from: $webPackageUrl"
+    curl -fL --retry 3 "$webPackageUrl" -o dist.tar.gz
+  fi
 
-  curl -fsSL "$pre_release_tar_url" -o dist.tar.gz
-  rm -rf public/dist && mkdir -p public/dist
-  tar -zxvf dist.tar.gz -C public/dist
-  rm -rf dist.tar.gz
+  extract_dir=$(mktemp -d)
+  tar -xzf dist.tar.gz -C "$extract_dir"
+  rm -rf public/dist
+  mkdir -p public/dist
+  if [ -d "$extract_dir/dist" ]; then
+    cp -a "$extract_dir/dist/." public/dist/
+  else
+    cp -a "$extract_dir/." public/dist/
+  fi
+  rm -rf "$extract_dir" dist.tar.gz
+}
+
+FetchWebRolling() {
+  FetchINoiWebPackage
 }
 
 FetchWebRelease() {
-  release_json=$(eval "curl -fsSL --max-time 2 $githubAuthArgs -H \"Accept: application/vnd.github.v3+json\" \"https://api.github.com/repos/$frontendRepo/releases/latest\"")
-  release_assets=$(echo "$release_json" | jq -r '.assets[].browser_download_url')
-  
-  if [ "$useLite" = true ]; then
-    release_tar_url=$(echo "$release_assets" | grep "openlist-frontend-dist-lite" | grep "\.tar\.gz$")
-  else
-    release_tar_url=$(echo "$release_assets" | grep "openlist-frontend-dist" | grep -v "lite" | grep "\.tar\.gz$")
-  fi
-  
-  curl -fsSL "$release_tar_url" -o dist.tar.gz
-  rm -rf public/dist && mkdir -p public/dist
-  tar -zxvf dist.tar.gz -C public/dist
-  rm -rf dist.tar.gz
+  FetchINoiWebPackage
 }
 
 BuildWinArm64() {

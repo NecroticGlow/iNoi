@@ -1,7 +1,7 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/OpenListTeam/Logo/main/logo.svg" width="128" height="128" alt="logo" />
+  <img src="https://cdn.jsdelivr.net/gh/li-peifeng/static/logo.png" width="128" height="128" alt="iNoi logo" />
 
-  <p><em>OpenList is a resilient, long-term governance, community-driven fork of AList — built to defend open source against trust-based attacks.</em></p>
+  <p><em>iNoi is a customized OpenList distribution with its own frontend and branding.</em></p>
 
   <img src="https://goreportcard.com/badge/github.com/OpenListTeam/OpenList/v3" alt="latest version" />
   <a href="https://github.com/OpenListTeam/OpenList/blob/main/LICENSE"><img src="https://img.shields.io/github/license/OpenListTeam/OpenList" alt="License" /></a>
@@ -13,6 +13,10 @@
 </div>
 
 ---
+
+> This branch is rebuilt on OpenList `v4.2.5`. Backend fixes and features come
+> from upstream OpenList; iNoi-specific changes are intentionally kept in a
+> small compatibility layer covering the frontend, branding and packaging.
 
 - English | [中文](./README/README_cn.md) | [日本語](./README/README_ja.md) | [Dutch](./README/README_nl.md) | [한국어](./README/README_ko.md) | [Deutsch](./README/README_de.md) | [Русский](./README/README_ru.md) | [Français](./README/README_fr.md) | [Español](./README/README_es.md) | [العربية](./README/README_ar.md)
 

@@ -17,11 +17,14 @@ import (
 func initUser() {
 	admin, err := op.GetAdmin()
 	adminPassword := random.String(8)
-	envpass := os.Getenv("OPENLIST_ADMIN_PASSWORD")
 	if flags.Dev {
 		adminPassword = "admin"
-	} else if len(envpass) > 0 {
-		adminPassword = envpass
+	} else if envPassword := os.Getenv("INOI_ADMIN_PASSWORD"); envPassword != "" {
+		adminPassword = envPassword
+	} else if envPassword := os.Getenv("OPENLIST_ADMIN_PASSWORD"); envPassword != "" {
+		// Keep the upstream variable as a compatibility alias for existing
+		// OpenList deployment manifests.
+		adminPassword = envPassword
 	}
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {

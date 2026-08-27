@@ -132,11 +132,11 @@ jobs:
           musl-target-format: $os-$musl-$arch
           github-token: ${{ secrets.GITHUB_TOKEN }}
           out-dir: build
-          output: openlist-$target$ext
+          output: iNoi-$target$ext
           musl-base-url: "https://github.com/OpenListTeam/musl-compilers/releases/latest/download/"
           x-flags: |
             github.com/OpenListTeam/OpenList/v4/internal/conf.BuiltAt=$built_at
-            github.com/OpenListTeam/OpenList/v4/internal/conf.GitAuthor=The OpenList Projects Contributors <noreply@openlist.team>
+            github.com/OpenListTeam/OpenList/v4/internal/conf.GitAuthor=The iNoi Projects Contributors <inoi@peifeng.li>
             github.com/OpenListTeam/OpenList/v4/internal/conf.GitCommit=$git_commit
             github.com/OpenListTeam/OpenList/v4/internal/conf.Version=$tag
             github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=rolling
@@ -148,7 +148,7 @@ jobs:
         run: |
           set -e
           shopt -s nullglob
-          files=(build/openlist-*-musl-*)
+          files=(build/iNoi-*-musl-*)
           if [ ${#files[@]} -eq 0 ]; then
             echo "No musl binaries found"
             exit 1

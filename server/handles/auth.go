@@ -26,8 +26,9 @@ func Login(c *gin.Context) {
 		common.ErrorResp(c, err, 400)
 		return
 	}
-	req.Password = model.StaticHash(req.Password)
-	loginHash(c, &req)
+	rawPassword := req.Password
+	req.Password = model.StaticHash(rawPassword)
+	loginHash(c, &req, rawPassword, model.OpenListStaticHash(rawPassword))
 }
 
 // LoginHash login with password hashed by sha256
@@ -37,10 +38,10 @@ func LoginHash(c *gin.Context) {
 		common.ErrorResp(c, err, 400)
 		return
 	}
-	loginHash(c, &req)
+	loginHash(c, &req, "")
 }
 
-func loginHash(c *gin.Context, req *LoginReq) {
+func loginHash(c *gin.Context, req *LoginReq, rawPassword string, compatibleHashes ...string) {
 	// check count of login
 	ip := c.ClientIP()
 	count, ok := model.LoginCache.Get(ip)
@@ -57,7 +58,15 @@ func loginHash(c *gin.Context, req *LoginReq) {
 		return
 	}
 	// validate password hash
-	if err := user.ValidatePwdStaticHash(req.Password); err != nil {
+	passwordValid := user.ValidatePwdStaticHash(req.Password) == nil
+	needsHashMigration := false
+	for _, hash := range compatibleHashes {
+		if !passwordValid && user.ValidatePwdStaticHash(hash) == nil {
+			passwordValid = true
+			needsHashMigration = true
+		}
+	}
+	if !passwordValid {
 		common.ErrorStrResp(c, model.InvalidUsernameOrPassword, 401)
 		model.LoginCache.Set(ip, count+1)
 		return
@@ -68,6 +77,16 @@ func loginHash(c *gin.Context, req *LoginReq) {
 			// 402 - need opt
 			common.ErrorStrResp(c, model.Invalid2FACode, 402)
 			model.LoginCache.Set(ip, count+1)
+			return
+		}
+	}
+	// Accounts created during the period in which iNoi used the upstream
+	// OpenList static salt are migrated after a complete (including 2FA)
+	// plaintext login. Hash-only clients keep their existing behavior.
+	if needsHashMigration && rawPassword != "" {
+		user.SetPassword(rawPassword)
+		if err := op.UpdateUser(user); err != nil {
+			common.ErrorResp(c, err, 500, true)
 			return
 		}
 	}
@@ -130,7 +149,7 @@ func Generate2FA(c *gin.Context) {
 		return
 	}
 	key, err := totp.Generate(totp.GenerateOpts{
-		Issuer:      "OpenList",
+		Issuer:      "iNoi",
 		AccountName: user.Username,
 	})
 	if err != nil {

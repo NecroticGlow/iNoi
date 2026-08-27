@@ -21,7 +21,12 @@ const (
 )
 
 const (
-	StaticHashSalt = "https://github.com/alist-org/alist"
+	// StaticHashSalt must stay aligned with iNoi-Web. Changing it would make
+	// password hashes produced by the frontend incompatible with the backend.
+	StaticHashSalt = "https://github.com/li-peifeng/inoi"
+	// OpenListStaticHashSalt is kept for accounts whose password was created
+	// while iNoi temporarily used the upstream OpenList/AList salt.
+	OpenListStaticHashSalt = "https://github.com/alist-org/alist"
 
 	InvalidUsernameOrPassword = "Invalid username or password"
 	Invalid2FACode            = "Invalid 2FA code"
@@ -80,7 +85,15 @@ func (u *User) IsAdmin() bool {
 }
 
 func (u *User) ValidateRawPassword(password string) error {
-	return u.ValidatePwdStaticHash(StaticHash(password))
+	var lastErr error
+	for _, hash := range StaticHashes(password) {
+		if err := u.ValidatePwdStaticHash(hash); err == nil {
+			return nil
+		} else {
+			lastErr = err
+		}
+	}
+	return lastErr
 }
 
 func (u *User) ValidatePwdStaticHash(pwdStaticHash string) error {
@@ -233,7 +246,19 @@ func (u *User) JoinPath(reqPath string) (string, error) {
 }
 
 func StaticHash(password string) string {
-	return utils.HashData(utils.SHA256, []byte(fmt.Sprintf("%s-%s", password, StaticHashSalt)))
+	return StaticHashWithSalt(password, StaticHashSalt)
+}
+
+func OpenListStaticHash(password string) string {
+	return StaticHashWithSalt(password, OpenListStaticHashSalt)
+}
+
+func StaticHashWithSalt(password, staticSalt string) string {
+	return utils.HashData(utils.SHA256, []byte(fmt.Sprintf("%s-%s", password, staticSalt)))
+}
+
+func StaticHashes(password string) []string {
+	return []string{StaticHash(password), OpenListStaticHash(password)}
 }
 
 func HashPwd(static string, salt string) string {
@@ -268,5 +293,5 @@ func (u *User) WebAuthnCredentials() []webauthn.Credential {
 }
 
 func (u *User) WebAuthnIcon() string {
-	return "https://res.oplist.org/logo/logo.svg"
+	return "/static/logo.png"
 }

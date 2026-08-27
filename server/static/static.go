@@ -118,6 +118,8 @@ func UpdateIndex() {
 	replaceMap1 := map[string]string{
 		"https://res.oplist.org/logo/logo.svg": favicon,
 		"https://res.oplist.org/logo/logo.png": logo,
+		"/static/favicon.ico":                  favicon,
+		"/static/logo.png":                     logo,
 		"Loading...":                           title,
 		"main_color: undefined":                fmt.Sprintf("main_color: '%s'", mainColor),
 	}

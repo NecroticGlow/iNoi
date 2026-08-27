@@ -12,10 +12,10 @@ import (
 )
 
 var RootCmd = &cobra.Command{
-	Use:   "openlist",
+	Use:   "iNoi",
 	Short: "A file list program that supports multiple storage.",
 	Long: `A file list program that supports multiple storage,
-built with love by OpenListTeam.
+based on OpenList and customized by the iNoi contributors.
 Complete documentation is available at https://doc.oplist.org/`,
 }
 

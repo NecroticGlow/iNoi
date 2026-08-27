@@ -14,6 +14,7 @@ type Addition struct {
 	AccessToken  string
 	UploadThread int    `json:"UploadThread" type:"number" default:"3" help:"the threads of upload"`
 	Platform     string `json:"platform" type:"string" default:"web" help:"the platform header value, sent with API requests"`
+	Protocol     string `json:"protocol" type:"select" options:"web,android" default:"web" help:"API protocol; use web unless Android compatibility is required"`
 }
 
 var config = driver.Config{
@@ -30,6 +31,7 @@ func init() {
 			Addition: Addition{
 				UploadThread: 3,
 				Platform:     "web",
+				Protocol:     "web",
 			},
 		}
 	})

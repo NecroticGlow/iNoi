@@ -172,7 +172,7 @@ func init() {
 	RootCmd.AddCommand(LangCmd)
 
 	// Add frontend-path flag
-	LangCmd.Flags().String("frontend-path", "../OpenList-Frontend", "Path to the frontend project directory")
+	LangCmd.Flags().String("frontend-path", "../iNoi-Web", "Path to the frontend project directory")
 
 	// Here you will define your flags and configuration settings.
 
