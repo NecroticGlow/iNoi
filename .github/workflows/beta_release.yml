@@ -39,14 +39,27 @@ jobs:
           git tag -l
           npx changelogithub --output CHANGELOG.md
 
+      - name: Prepare release notes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          source = Path("CHANGELOG.md").read_text(encoding="utf-8")
+          suffix = "\n\n> The full changelog is attached to this release as CHANGELOG.md.\n"
+          limit = 120_000
+          if len(source) > limit:
+              source = source[: limit - len(suffix)] + suffix
+          Path("RELEASE_NOTES.md").write_text(source, encoding="utf-8")
+          PY
+
       - name: Upload assets to beta release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if ! gh release view beta; then
-            gh release create beta --prerelease --notes-file CHANGELOG.md
+            gh release create beta --prerelease --notes-file RELEASE_NOTES.md
           else
-            gh release edit beta --prerelease --notes-file CHANGELOG.md
+            gh release edit beta --prerelease --notes-file RELEASE_NOTES.md
           fi
           gh release upload beta "CHANGELOG.md" --clobber
 
