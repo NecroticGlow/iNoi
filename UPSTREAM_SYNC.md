@@ -16,16 +16,12 @@ changes are intentionally limited to:
 - the iNoi executable, CLI text, frontend package and default branding;
 - compatibility with iNoi's password static salt, plus recovery support for
   accounts created while the upstream OpenList/AList salt was in use;
-- iNoi container paths, image names and release metadata;
-- a per-storage `web`/`android` protocol selector for the 123Pan driver. Web
-  remains the default and uses the official v4.2.5 endpoints and signing;
-  Android only replaces the endpoint/header/login compatibility layer and
-  continues to use the upstream list, upload, offline-task and response code.
+- iNoi container paths, image names and release metadata.
 
-The 123Pan extension lives in `drivers/123/protocol.go`. Never replace the
-whole driver with the pre-sync implementation or restore the old
-process-wide `PAN123_PROTOCOL` switch. Existing and invalid protocol values
-must fall back to Web so an upgrade cannot silently change request behavior.
+The 123Pan driver is deliberately not part of the maintained iNoi layer.
+`drivers/123` was restored to the official v4.2.5 implementation on
+2026-08-28; the former Android protocol selector and its tests were removed.
+Future synchronization must keep this directory aligned with upstream.
 
 Small format-string compatibility changes across affected v4.2.5 drivers and
 offline-download adapters keep the baseline compatible with newer Go vet
@@ -44,12 +40,11 @@ fields, missing routes and upload regressions.
 1. Fetch `upstream` and choose a released OpenList tag.
 2. Merge or rebase that tag while keeping the maintained layer above small.
 3. Review changes to `build.sh`, `internal/bootstrap/data/setting.go`,
-   `internal/model/user.go`, `server/handles/auth.go`, `drivers/123/protocol.go`,
-   and container files.
+   `internal/model/user.go`, `server/handles/auth.go`, and container files.
 4. Run the upstream test/build matrix and iNoi compatibility tests before
    publishing an image.
 
-## Acceptance on 2026-08-27
+## Initial rebuild acceptance on 2026-08-27
 
 An independent `gpt-5.6-luna` acceptance run used the repository's declared
 Go 1.26.4 toolchain on Windows. The following checks passed:
@@ -69,3 +64,16 @@ local aria2 service), and `server/mcp` (session-limit assertion). No failure
 was attributed to the iNoi customization. `go vet ./...` has the unchanged
 Windows `internal/mem` unsafe-pointer diagnostic. Race testing requires CGO,
 and no Docker-compatible runtime was available on the acceptance host.
+
+## Official 123Pan restore acceptance on 2026-08-28
+
+After the Android compatibility layer was removed, an independent
+`gpt-5.6-luna` check confirmed that `drivers/123` has zero differences from
+the official v4.2.5 tag and contains no Android protocol selector or
+`PAN123_PROTOCOL` remnants. With Go 1.26.4, `go build ./...`, the iNoi
+model/auth tests, and `go test -vet=off ./drivers/123` passed. The ordinary
+123Pan package test is blocked only by the unchanged upstream dynamic
+`fmt.Errorf` vet diagnostic in `drivers/123/util.go`.
+
+At the time of this check, v4.2.5 remained the latest stable tag;
+`upstream/main` was six unreleased commits ahead.

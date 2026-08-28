@@ -23,16 +23,41 @@ import (
 
 // do others that not defined in Driver interface
 
+const (
+	Api              = "https://yun.123pan.com/api"
+	AApi             = "https://yun.123pan.com/a/api"
+	BApi             = "https://yun.123pan.com/b/api"
+	LoginApi         = "https://login.123pan.com/api"
+	MainApi          = BApi
+	SignIn           = LoginApi + "/user/sign_in"
+	Logout           = MainApi + "/user/logout"
+	UserInfo         = MainApi + "/user/info"
+	FileList         = MainApi + "/file/list/new"
+	DownloadInfo     = MainApi + "/file/download_info"
+	Mkdir            = MainApi + "/file/upload_request"
+	Move             = MainApi + "/file/mod_pid"
+	Rename           = MainApi + "/file/rename"
+	Trash            = MainApi + "/file/trash"
+	UploadRequest    = MainApi + "/file/upload_request"
+	UploadComplete   = MainApi + "/file/upload_complete"
+	S3PreSignedUrls  = MainApi + "/file/s3_repare_upload_parts_batch"
+	S3Auth           = MainApi + "/file/s3_upload_object/auth"
+	UploadCompleteV2 = MainApi + "/file/upload_complete/v2"
+	S3Complete       = MainApi + "/file/s3_complete_multipart_upload"
+
+	OfflineResolve    = MainApi + "/v2/offline_download/task/resolve"
+	OfflineSubmit     = MainApi + "/v2/offline_download/task/submit"
+	OfflineTaskList   = MainApi + "/offline_download/task/list"
+	OfflineTaskDelete = MainApi + "/offline_download/task/delete"
+	// AuthKeySalt      = "8-8D$sL8gPjom7bk#cY"
+)
+
 var ErrOfflineTaskNotFound = errors.New("offline task not found")
 
 func signPath(path string, os string, version string) (k string, v string) {
-	random := fmt.Sprintf("%.f", math.Round(1e7*rand.Float64()))
-	return signPathAt(path, os, version, time.Now(), random)
-}
-
-func signPathAt(path string, os string, version string, now time.Time, random string) (k string, v string) {
 	table := []byte{'a', 'd', 'e', 'f', 'g', 'h', 'l', 'm', 'y', 'i', 'j', 'n', 'o', 'p', 'k', 'q', 'r', 's', 't', 'u', 'b', 'c', 'v', 'w', 's', 'z'}
-	now = now.In(time.FixedZone("CST", 8*3600))
+	random := fmt.Sprintf("%.f", math.Round(1e7*rand.Float64()))
+	now := time.Now().In(time.FixedZone("CST", 8*3600))
 	timestamp := fmt.Sprint(now.Unix())
 	nowStr := []byte(now.Format("200601021504"))
 	for i := 0; i < len(nowStr); i++ {
@@ -128,15 +153,35 @@ func GetApi(rawUrl string) string {
 //}
 
 func (d *Pan123) login() error {
-	signIn, headers, body := d.loginSpec()
+	var body base.Json
+	if utils.IsEmailFormat(d.Username) {
+		body = base.Json{
+			"mail":     d.Username,
+			"password": d.Password,
+			"type":     2,
+		}
+	} else {
+		body = base.Json{
+			"passport": d.Username,
+			"password": d.Password,
+			"remember": true,
+		}
+	}
 	res, err := base.RestyClient.R().
-		SetHeaders(headers).
-		SetBody(body).Post(signIn)
+		SetHeaders(map[string]string{
+			"origin":      "https://yun.123pan.com",
+			"referer":     "https://yun.123pan.com/",
+			"user-agent":  "Dart/2.19(dart:io)-openlist",
+			"platform":    "web",
+			"app-version": "3",
+			//"user-agent":  base.UserAgent,
+		}).
+		SetBody(body).Post(SignIn)
 	if err != nil {
 		return err
 	}
 	if utils.Json.Get(res.Body(), "code").ToInt() != 200 {
-		err = errors.New(utils.Json.Get(res.Body(), "message").ToString())
+		err = fmt.Errorf(utils.Json.Get(res.Body(), "message").ToString())
 	} else {
 		d.AccessToken = utils.Json.Get(res.Body(), "data", "token").ToString()
 	}
@@ -161,7 +206,15 @@ func (d *Pan123) Request(url string, method string, callback base.ReqCallback, r
 	isRetry := false
 do:
 	req := base.RestyClient.R()
-	req.SetHeaders(d.requestHeaders())
+	req.SetHeaders(map[string]string{
+		"origin":        "https://yun.123pan.com",
+		"referer":       "https://yun.123pan.com/",
+		"authorization": "Bearer " + d.AccessToken,
+		"user-agent":    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) openlist-client",
+		"platform":      d.Platform,
+		"app-version":   "3",
+		//"user-agent":    base.UserAgent,
+	})
 	if callback != nil {
 		callback(req)
 	}
@@ -173,7 +226,7 @@ do:
 	//	return nil, err
 	//}
 	//req.SetQueryParam("auth-key", *authKey)
-	res, err := req.Execute(method, d.requestURL(url))
+	res, err := req.Execute(method, GetApi(url))
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +248,7 @@ do:
 
 func (d *Pan123) OfflineDownload(ctx context.Context, uri string, dstDir model.Obj) (int64, error) {
 	var resolveResp offlineResolveResp
-	_, err := d.Request(d.endpoints().OfflineResolve, http.MethodPost, func(req *resty.Request) {
+	_, err := d.Request(OfflineResolve, http.MethodPost, func(req *resty.Request) {
 		req.SetContext(ctx).SetBody(base.Json{
 			"urls": uri,
 		})
@@ -232,7 +285,7 @@ func (d *Pan123) OfflineDownload(ctx context.Context, uri string, dstDir model.O
 	}
 
 	var submitResp offlineSubmitResp
-	_, err = d.Request(d.endpoints().OfflineSubmit, http.MethodPost, func(req *resty.Request) {
+	_, err = d.Request(OfflineSubmit, http.MethodPost, func(req *resty.Request) {
 		req.SetContext(ctx).SetBody(base.Json{
 			"resource_list": []base.Json{
 				{
@@ -267,7 +320,7 @@ func (d *Pan123) GetOfflineTask(ctx context.Context, taskID int64) (*offlineTask
 	statusArr := []int{0, 1, 2, 3}
 	for {
 		var listResp offlineTaskListResp
-		_, err := d.Request(d.endpoints().OfflineTaskList, http.MethodPost, func(req *resty.Request) {
+		_, err := d.Request(OfflineTaskList, http.MethodPost, func(req *resty.Request) {
 			req.SetContext(ctx).SetBody(base.Json{
 				"current_page": page,
 				"page_size":    pageSize,
@@ -294,7 +347,7 @@ func (d *Pan123) DeleteOfflineTasks(ctx context.Context, taskIDs []int64) error 
 	if len(taskIDs) == 0 {
 		return nil
 	}
-	_, err := d.Request(d.endpoints().OfflineTaskDelete, http.MethodPost, func(req *resty.Request) {
+	_, err := d.Request(OfflineTaskDelete, http.MethodPost, func(req *resty.Request) {
 		req.SetContext(ctx).SetBody(base.Json{
 			"task_ids": taskIDs,
 		})
@@ -307,9 +360,8 @@ func (d *Pan123) getFiles(ctx context.Context, parentId string, name string) ([]
 	total := 0
 	res := make([]File, 0)
 	// 2024-02-06 fix concurrency by 123pan
-	fileListURL := d.endpoints().FileList
 	for {
-		if err := d.APIRateLimit(ctx, fileListURL); err != nil {
+		if err := d.APIRateLimit(ctx, FileList); err != nil {
 			return nil, err
 		}
 		var resp Files
@@ -328,7 +380,7 @@ func (d *Pan123) getFiles(ctx context.Context, parentId string, name string) ([]
 			"operateType":          "4",
 			"inDirectSpace":        "false",
 		}
-		_res, err := d.Request(fileListURL, http.MethodGet, func(req *resty.Request) {
+		_res, err := d.Request(FileList, http.MethodGet, func(req *resty.Request) {
 			req.SetQueryParams(query)
 		}, &resp)
 		if err != nil {
@@ -350,7 +402,7 @@ func (d *Pan123) getFiles(ctx context.Context, parentId string, name string) ([]
 
 func (d *Pan123) getUserInfo(ctx context.Context) (*UserInfoResp, error) {
 	var resp UserInfoResp
-	_, err := d.Request(d.endpoints().UserInfo, http.MethodGet, func(req *resty.Request) {
+	_, err := d.Request(UserInfo, http.MethodGet, func(req *resty.Request) {
 		req.SetContext(ctx)
 	}, &resp)
 	if err != nil {
